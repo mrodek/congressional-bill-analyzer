@@ -1,0 +1,8 @@
+Error: No module named 'congress_api'
+
+Traceback (most recent call last):
+  File "C:\Users\marti\CascadeProjects\congressional-bill-analyzer\debug_app.py", line 5, in <module>
+    from src.app import create_interface
+  File "C:\Users\marti\CascadeProjects\congressional-bill-analyzer\src\app.py", line 4, in <module>
+    from congress_api import CongressAPI  # Using the official API instead of scraping
+ModuleNotFoundError: No module named 'congress_api'
