@@ -1,6 +1,6 @@
 import chromadb
 from chromadb.config import Settings
-from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction # Added import
+from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 from typing import List, Dict, Tuple
 from openai import OpenAI
 
@@ -10,22 +10,27 @@ class QASystem:
         self.openai_client = OpenAI(api_key=api_key)
         self.db_path = db_path
         self.chroma_client = chromadb.Client(Settings(persist_directory=db_path))
+        # Initialize OpenAI embedding function to be used consistently
+        self.embedding_function = OpenAIEmbeddingFunction(
+            api_key=api_key,
+            model_name="text-embedding-ada-002"
+        )
         self.collection = self._setup_collection()
         self.bill_metadatas = {}  # To store bill-level metadata
 
     def _setup_collection(self) -> chromadb.Collection:
         """Initialize or get the ChromaDB collection"""
         try:
-            collection = self.chroma_client.get_collection("congressional_bills")
-        except:
-            # Initialize OpenAI embedding function
-            openai_ef = OpenAIEmbeddingFunction(
-                api_key=self.api_key,
-                model_name="text-embedding-ada-002"
+            # Try to get existing collection and set its embedding function
+            collection = self.chroma_client.get_collection(
+                name="congressional_bills",
+                embedding_function=self.embedding_function
             )
+        except:
+            # Create new collection with our embedding function
             collection = self.chroma_client.create_collection(
                 name="congressional_bills",
-                embedding_function=openai_ef, # Specify the embedding function
+                embedding_function=self.embedding_function,
                 metadata={"hnsw:space": "cosine"}
             )
         return collection
@@ -65,14 +70,9 @@ class QASystem:
 
     def get_relevant_context(self, question: str, bill_id: str, k: int = 5) -> List[Dict[str, any]]:
         """Retrieve relevant bill sections for a question"""
-        response = self.openai_client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=question
-        )
-        query_embedding = response.data[0].embedding
-        
+        # Use the collection's embedding function directly
         results = self.collection.query(
-            query_embeddings=[query_embedding],
+            query_texts=[question],  # Let ChromaDB handle the embedding
             n_results=k,
             where={"bill_id": bill_id}
         )

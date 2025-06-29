@@ -37,19 +37,17 @@ def create_ideology_gauge(score):
         mode = "gauge+number",
         value = score,
         domain = {'x': [0, 1], 'y': [0, 1]},
-        title = {'text': "Ideology Score", 'font': {'size': 20}},
+        title = {'text': "Ideology Score", 'font': {'size': 16}},
         gauge = {
-            'axis': {'range': [-10, 10], 'tickwidth': 1, 'tickcolor': "darkblue"},
-            'bar': {'color': "darkblue"},
+            'axis': {'range': [-10, 10], 'tickwidth': 1, 'tickcolor': "darkgray"},
+            'bar': {'color': "darkgray"},
             'bgcolor': "white",
             'borderwidth': 2,
             'bordercolor': "gray",
             'steps': [
-                {'range': [-10, -5], 'color': 'rgba(255, 0, 0, 0.7)'},       # Strong Liberal (Red)
-                {'range': [-5, -1], 'color': 'rgba(255, 165, 0, 0.7)'},    # Moderate Liberal (Orange)
-                {'range': [-1, 1], 'color': 'rgba(255, 255, 0, 0.7)'},      # Moderate (Yellow)
-                {'range': [1, 5], 'color': 'rgba(173, 216, 230, 0.7)'},    # Moderate Conservative (Light Blue)
-                {'range': [5, 10], 'color': 'rgba(0, 0, 255, 0.7)'}        # Strong Conservative (Blue)
+                {'range': [-10, -2.5], 'color': 'rgba(0, 0, 255, 0.7)'},    # Liberal (Blue)
+                {'range': [-2.5, 2.5], 'color': 'rgba(128, 0, 128, 0.7)'},    # Moderate (Purple)
+                {'range': [2.5, 10], 'color': 'rgba(255, 0, 0, 0.7)'}         # Conservative (Red)
             ],
             'threshold': {
                 'line': {'color': "black", 'width': 4},
@@ -58,7 +56,7 @@ def create_ideology_gauge(score):
             }
         }
     ))
-    fig.update_layout(height=250, margin=dict(l=10, r=10, t=50, b=10))
+    fig.update_layout(height=125, margin=dict(l=10, r=10, t=50, b=10))
     return fig
 
 def create_confidence_gauge(confidence_score):
@@ -66,7 +64,7 @@ def create_confidence_gauge(confidence_score):
         mode = "gauge+number",
         value = confidence_score,
         domain = {'x': [0, 1], 'y': [0, 1]},
-        title = {'text': "Confidence Score", 'font': {'size': 20}},
+        title = {'text': "Confidence Score", 'font': {'size': 16}},
         gauge = {
             'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkgreen"},
             'bar': {'color': "darkgreen"},
@@ -85,7 +83,40 @@ def create_confidence_gauge(confidence_score):
             }
         }
     ))
-    fig.update_layout(height=250, margin=dict(l=10, r=10, t=50, b=10))
+    fig.update_layout(height=125, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+def create_size_gauge(word_count):
+    # Define size categories based on word count
+    # Small: 0-5,000, Medium: 5,000-20,000, Large: 20,000-50,000, Very Large: 50,000+
+    max_range = 100000  # Cap the gauge at 100k words for readability
+    display_value = min(word_count, max_range)  # Cap the displayed value
+    
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = display_value,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': "Bill Size (Words)", 'font': {'size': 16}},
+        gauge = {
+            'axis': {'range': [0, max_range], 'tickwidth': 1, 'tickcolor': "darkblue"},
+            'bar': {'color': "darkblue"},
+            'bgcolor': "white",
+            'borderwidth': 2,
+            'bordercolor': "gray",
+            'steps': [
+                {'range': [0, 5000], 'color': 'rgba(144, 238, 144, 0.7)'},      # Light Green - Small
+                {'range': [5000, 20000], 'color': 'rgba(255, 255, 0, 0.7)'},      # Yellow - Medium
+                {'range': [20000, 50000], 'color': 'rgba(255, 165, 0, 0.7)'},    # Orange - Large
+                {'range': [50000, max_range], 'color': 'rgba(255, 0, 0, 0.7)'}   # Red - Very Large
+            ],
+            'threshold': {
+                'line': {'color': "black", 'width': 4},
+                'thickness': 0.75,
+                'value': display_value
+            }
+        }
+    ))
+    fig.update_layout(height=125, margin=dict(l=10, r=10, t=50, b=10))
     return fig
 
 
@@ -167,6 +198,8 @@ def perform_bill_analysis(url_to_analyze: str):
             "summary": summary_analysis.get("summary", "N/A"),
             "ideology_score": summary_analysis.get("ideology_analysis", {}).get("score", 0.0),
             "ideology_confidence": summary_analysis.get("ideology_analysis", {}).get("confidence", 0.0),
+            "ideology_reasoning": summary_analysis.get("ideology_analysis", {}).get("reasoning", "No detailed reasoning available."),
+            "key_phrases": summary_analysis.get("ideology_analysis", {}).get("key_phrases", []),
             "word_count": word_count,
             "size_category": size_category,
             "bill_metadata": bill_metadata_dict, # Store the dictionary version
@@ -183,6 +216,12 @@ def perform_bill_analysis(url_to_analyze: str):
 
 # --- Streamlit App UI --- 
 st.set_page_config(page_title="Congressional Bill Analyzer - Streamlit", layout="wide")
+
+# Sidebar for navigation
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Select Page", ["Bill Analysis", "List Bills"])
+
+# Main title
 st.title("📊 Congressional Bill Analyzer (Streamlit Edition)")
 st.markdown("--- ")
 
@@ -212,23 +251,25 @@ if 'list_bills_sort' not in st.session_state:
 
 # --- Main App Sections --- 
 
-# Section 1: Bill Analysis Input
-st.header("🔎 Bill Analysis")
-bill_url_input = st.text_input(
-    "Enter Congress.gov Bill URL:", 
-    value=st.session_state.bill_url, 
-    key="bill_url_input_key"
-)
-
-if st.button("Analyze Bill", key="analyze_bill_btn"):
-    if bill_url_input:
-        st.session_state.bill_url = bill_url_input
-        # Clear previous results before new analysis
-        st.session_state.analysis_results = None
-        st.session_state.processed_sections = []
-        st.session_state.section_analysis_json = None
-        st.session_state.qa_history = []
-        st.session_state.current_bill_id_for_qa = None
+# Display content based on selected page
+if page == "Bill Analysis":
+    # Section 1: Bill Analysis Input
+    st.header("🔎 Bill Analysis")
+    bill_url_input = st.text_input(
+        "Enter Congress.gov Bill URL:", 
+        value=st.session_state.bill_url,
+        help="Enter a URL from Congress.gov for a bill, e.g., https://www.congress.gov/bill/118th-congress/house-bill/589"
+    )
+    
+    if st.button("Analyze Bill", key="analyze_bill_btn"):
+        if bill_url_input:
+            st.session_state.bill_url = bill_url_input
+            # Clear previous results before new analysis
+            st.session_state.analysis_results = None
+            st.session_state.processed_sections = []
+            st.session_state.section_analysis_json = None
+            st.session_state.qa_history = []
+            st.session_state.current_bill_id_for_qa = None
 
         with st.spinner("Analyzing bill... Please wait."):
             logger.info(f"Analyze button clicked for URL: {st.session_state.bill_url}")
@@ -240,7 +281,9 @@ if st.button("Analyze Bill", key="analyze_bill_btn"):
                     "ideology_score": analysis_data.get("ideology_score"),
                     "ideology_confidence": analysis_data.get("ideology_confidence"),
                     "word_count": analysis_data.get("word_count"),
-                    "size_category": analysis_data.get("size_category")
+                    "size_category": analysis_data.get("size_category"),
+                    "ideology_reasoning": analysis_data.get("ideology_reasoning", "No detailed reasoning available."),
+                    "key_phrases": analysis_data.get("key_phrases", [])
                 }
                 st.session_state.processed_sections = analysis_data.get("processed_sections", [])
                 st.session_state.current_bill_id_for_qa = analysis_data.get("bill_id")
@@ -282,17 +325,32 @@ if st.session_state.analysis_results:
     # Example display - to be populated by actual analysis
     st.markdown(f"**Executive Summary:**\n{res.get('summary', 'Not available.')}")
     
-    col1, col2 = st.columns(2) # Using 2 columns for gauges
+    col1, col2, col3 = st.columns(3) # Using 3 columns for gauges
     with col1:
         ideology_score_val = res.get('ideology_score', 0.0)
         st.plotly_chart(create_ideology_gauge(ideology_score_val), use_container_width=True)
     with col2:
         confidence_score_val = res.get('ideology_confidence', 0.0)
         st.plotly_chart(create_confidence_gauge(confidence_score_val), use_container_width=True)
-
-    col3, col4 = st.columns(2) # Separate row for word count and size
-    col3.metric("Word Count", res.get('word_count', 'N/A'))
-    col4.text_input("Bill Size Category", value=res.get('size_category', 'N/A'), disabled=True)
+    with col3:
+        word_count_val = res.get('word_count', 0)
+        st.plotly_chart(create_size_gauge(word_count_val), use_container_width=True)
+        
+    # Display Detailed Reasoning and Key Phrases in a text box
+    st.markdown("### 🔍 Ideology Analysis Details")
+    
+    # Format the detailed reasoning and key phrases with bolded section headers
+    detailed_reasoning = res.get('ideology_reasoning', 'No detailed reasoning available.')
+    key_phrases = res.get('key_phrases', [])
+    
+    st.markdown("**DETAILED REASONING:**")
+    st.markdown(detailed_reasoning)
+    
+    st.markdown("**KEY PHRASES:**")
+    if key_phrases:
+        st.markdown(', '.join([f'"{phrase}"' for phrase in key_phrases]))
+    else:
+        st.markdown("No key phrases available.")
     
     if st.session_state.processed_sections: # Only show if sections were processed
         if st.button("Generate Section-by-Section Analysis", key="generate_sections_btn"):
@@ -325,14 +383,15 @@ st.markdown("--- ")
 # Section 2: Q&A about the Bill
 st.header("❓ Ask Questions About The Bill")
 if st.session_state.current_bill_id_for_qa:
-    # Display Q&A history
+    # Add the chat input at the top of this section
+    question_input = st.chat_input("Ask your question about the analyzed bill...")
+    
+    # Display chat history
     for i, (q, a) in enumerate(st.session_state.qa_history):
         with st.chat_message("user", avatar="❓"):
             st.markdown(q)
         with st.chat_message("assistant", avatar="💡"):
             st.markdown(a)
-
-    question_input = st.chat_input("Ask your question about the analyzed bill...")
     if question_input:
         # Add user question to history and display it immediately
         st.session_state.qa_history.append((question_input, None)) # Placeholder for answer
@@ -365,81 +424,82 @@ if st.session_state.current_bill_id_for_qa:
 else:
     st.info("Please analyze a bill first to enable Q&A.")
 
-st.markdown("--- ")
+# List Bills Page
+if page == "List Bills":
+    # Section 3: List Bills from API (New Feature)
+    st.header("📜 List Bills from Congress.gov")
+    col1, col2 = st.columns(2)
+    with col1:
+        congress_num = st.number_input("Congress Number (e.g., 118):", min_value=93, max_value=200, value=st.session_state.list_bills_congress, key="list_bills_congress_input")
+        bill_type_options = ["hr", "s", "hres", "sres", "hjres", "sjres", "hconres", "sconres"]
+        bill_type_selected = st.selectbox("Bill Type:", options=bill_type_options, index=bill_type_options.index(st.session_state.list_bills_type), key="list_bills_type_input")
+    with col2:
+        limit_num = st.number_input("Number of bills to fetch (Limit):", min_value=1, max_value=250, value=st.session_state.list_bills_limit, key="list_bills_limit_input") # Max limit for API is 250
+        sort_options = {
+            "Latest Action (Newest First)": "date+desc",
+            "Latest Action (Oldest First)": "date+asc",
+            "Bill Number (Descending)": "number+desc",
+            "Bill Number (Ascending)": "number+asc"
+        }
+        sort_display = st.selectbox("Sort by:", options=list(sort_options.keys()), index=list(sort_options.values()).index(st.session_state.list_bills_sort), key="list_bills_sort_input")
+        sort_selected = sort_options[sort_display]
 
-# Section 3: List Bills from API (New Feature)
-st.header("📜 List Bills from Congress.gov")
-col1, col2 = st.columns(2)
-with col1:
-    congress_num = st.number_input("Congress Number (e.g., 118):", min_value=93, max_value=200, value=st.session_state.list_bills_congress, key="list_bills_congress_input")
-    bill_type_options = ["hr", "s", "hres", "sres", "hjres", "sjres", "hconres", "sconres"]
-    bill_type_selected = st.selectbox("Bill Type:", options=bill_type_options, index=bill_type_options.index(st.session_state.list_bills_type), key="list_bills_type_input")
-with col2:
-    limit_num = st.number_input("Number of bills to fetch (Limit):", min_value=1, max_value=250, value=st.session_state.list_bills_limit, key="list_bills_limit_input") # Max limit for API is 250
-    sort_options = {
-        "Latest Action (Newest First)": "date+desc",
-        "Latest Action (Oldest First)": "date+asc",
-        "Bill Number (Descending)": "number+desc",
-        "Bill Number (Ascending)": "number+asc"
-    }
-    sort_display = st.selectbox("Sort by:", options=list(sort_options.keys()), index=list(sort_options.values()).index(st.session_state.list_bills_sort), key="list_bills_sort_input")
-    sort_selected = sort_options[sort_display]
+    if st.button("Fetch Bills", key="fetch_bills_btn"):
+        # Update session state from inputs before fetching
+        st.session_state.list_bills_congress = congress_num
+        st.session_state.list_bills_type = bill_type_selected
+        st.session_state.list_bills_limit = limit_num
+        st.session_state.list_bills_sort = sort_selected
 
-if st.button("Fetch Bills", key="fetch_bills_btn"):
-    # Update session state from inputs before fetching
-    st.session_state.list_bills_congress = congress_num
-    st.session_state.list_bills_type = bill_type_selected
-    st.session_state.list_bills_limit = limit_num
-    st.session_state.list_bills_sort = sort_selected
-
-    with st.spinner(f"Fetching {limit_num} '{bill_type_selected}' bills from {congress_num}th Congress..."):
-        try:
-            logger.info(f"Fetching bills: Congress={congress_num}, Type={bill_type_selected}, Limit={limit_num}, Sort={sort_selected}")
-            bills_data = congress_api_client.get_bill_list(
-                congress=congress_num,
-                bill_type=bill_type_selected,
-                limit=limit_num,
-                sort=sort_selected
-            )
-            if bills_data:
-                st.session_state.fetched_bills = bills_data
-                logger.info(f"Successfully fetched {len(bills_data)} bills.")
-                st.success(f"Successfully fetched {len(bills_data)} bills.")
-            else:
+        with st.spinner(f"Fetching {limit_num} '{bill_type_selected}' bills from {congress_num}th Congress..."):
+            try:
+                logger.info(f"Fetching bills: Congress={congress_num}, Type={bill_type_selected}, Limit={limit_num}, Sort={sort_selected}")
+                bills_data = congress_api_client.get_bill_list(
+                    congress=congress_num,
+                    bill_type=bill_type_selected,
+                    limit=limit_num,
+                    sort=sort_selected
+                )
+                if bills_data:
+                    st.session_state.fetched_bills = bills_data
+                    logger.info(f"Successfully fetched {len(bills_data)} bills.")
+                    st.success(f"Successfully fetched {len(bills_data)} bills.")
+                else:
+                    st.session_state.fetched_bills = []
+                    logger.info("No bills found for the given criteria.")
+                    st.info("No bills found for the given criteria.")
+            except Exception as e_fetch:
                 st.session_state.fetched_bills = []
-                logger.info("No bills found for the given criteria.")
-                st.info("No bills found for the given criteria.")
-        except Exception as e_fetch:
-            st.session_state.fetched_bills = []
-            logger.error(f"Error fetching bill list: {e_fetch}", exc_info=True)
-            st.error(f"Failed to fetch bills: {e_fetch}")
+                logger.error(f"Error fetching bill list: {e_fetch}", exc_info=True)
+                st.error(f"Failed to fetch bills: {e_fetch}")
 
-if st.session_state.fetched_bills:
-    st.subheader(f"Displaying {len(st.session_state.fetched_bills)} Fetched Bills")
-    for i, bill in enumerate(st.session_state.fetched_bills):
-        bill_title = bill.get('title', 'N/A')
-        bill_number_display = bill.get('number', 'N/A')
-        bill_congress_display = bill.get('congress', 'N/A')
-        bill_type_display = bill.get('type', 'N/A')
-        bill_id_display = f"{bill_congress_display}-{bill_type_display}-{bill_number_display}"
-        
-        latest_action = bill.get('latestAction', {})
-        latest_action_date = latest_action.get('actionDate', 'N/A')
-        latest_action_text = latest_action.get('text', 'N/A')
-        update_date = bill.get('updateDate', 'N/A')
-        origin_chamber = bill.get('originChamber', 'N/A')
+    # Display fetched bills if available
+    if st.session_state.fetched_bills:
+        st.subheader(f"Displaying {len(st.session_state.fetched_bills)} Fetched Bills")
+        for i, bill in enumerate(st.session_state.fetched_bills):
+            bill_title = bill.get('title', 'N/A')
+            bill_number_display = bill.get('number', 'N/A')
+            bill_congress_display = bill.get('congress', 'N/A')
+            bill_type_display = bill.get('type', 'N/A')
+            bill_id_display = f"{bill_congress_display}-{bill_type_display}-{bill_number_display}"
+            
+            latest_action = bill.get('latestAction', {})
+            latest_action_date = latest_action.get('actionDate', 'N/A')
+            latest_action_text = latest_action.get('text', 'N/A')
+            update_date = bill.get('updateDate', 'N/A')
+            origin_chamber = bill.get('originChamber', 'N/A')
 
-        with st.expander(f"{i+1}. {bill_title} ({bill_id_display})"):
-            st.markdown(f"**Bill ID:** {bill_id_display}")
-            st.markdown(f"**Title:** {bill_title}")
-            st.markdown(f"**Origin Chamber:** {origin_chamber}")
-            st.markdown(f"**Latest Action Date:** {latest_action_date}")
-            st.markdown(f"**Latest Action:** {latest_action_text}")
-            st.markdown(f"**Last Update from API:** {update_date}")
-            # Provide a link to the bill on Congress.gov if possible (requires constructing the URL)
-            if bill_congress_display and bill_type_display and bill_number_display:
-                bill_url_congress_gov = f"https://www.congress.gov/bill/{bill_congress_display}th-congress/{bill_type_display.lower()}-bill/{bill_number_display}"
-                st.markdown(f"[View on Congress.gov]({bill_url_congress_gov})")
+            with st.expander(f"{i+1}. {bill_title} ({bill_id_display})"):
+                st.markdown(f"**Bill ID:** {bill_id_display}")
+                st.markdown(f"**Title:** {bill_title}")
+                st.markdown(f"**Origin Chamber:** {origin_chamber}")
+                st.markdown(f"**Latest Action Date:** {latest_action_date}")
+                st.markdown(f"**Latest Action:** {latest_action_text}")
+                st.markdown(f"**Last Update from API:** {update_date}")
+                # Provide a link to the bill on Congress.gov if possible (requires constructing the URL)
+                if bill_congress_display and bill_type_display and bill_number_display:
+                    bill_url_congress_gov = f"https://www.congress.gov/bill/{bill_congress_display}th-congress/{bill_type_display.lower()}-bill/{bill_number_display}"
+                    st.markdown(f"[View on Congress.gov]({bill_url_congress_gov})")
 
 st.sidebar.info("Streamlit UI for Congressional Bill Analysis.")
 
